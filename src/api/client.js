@@ -4,17 +4,25 @@ import useAuthStore from '../store/authStore';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://dev-api.carbontrackapp.com/api/v1';
 const REFRESH_THRESHOLD_SECONDS = 10 * 60;
+export const API_REQUEST_TIMEOUT_MS = 15000;
+export const NETWORK_TIMEOUT_CODE = 'NETWORK_TIMEOUT';
 
 const refreshPromises = new Map();
 
 const apiClient = axios.create({
   baseURL: API_URL,
   headers: { Accept: 'application/json', 'X-Client-Platform': 'mobile' },
+  timeout: API_REQUEST_TIMEOUT_MS,
+  timeoutErrorMessage: NETWORK_TIMEOUT_CODE,
+  transitional: { clarifyTimeoutError: true },
 });
 
 const refreshClient = axios.create({
   baseURL: API_URL,
   headers: { 'Content-Type': 'application/json', 'X-Client-Platform': 'mobile' },
+  timeout: API_REQUEST_TIMEOUT_MS,
+  timeoutErrorMessage: NETWORK_TIMEOUT_CODE,
+  transitional: { clarifyTimeoutError: true },
 });
 
 const decodeJwtPayload = (token) => {

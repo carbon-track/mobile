@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, UIManager, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -17,26 +17,45 @@ import RecordDetailScreen from '../screens/RecordDetailScreen';
 import StoreScreen from '../screens/StoreScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 
-const isNativeTabsEnabled = () => (
-  !__DEV__
-  && Platform.OS === 'ios'
+const shouldUseNativeTabs = () => (
+  Platform.OS === 'ios'
   && process.env.EXPO_PUBLIC_ENABLE_NATIVE_IOS_TABS === 'true'
 );
 
+const hasNativeTabsHost = () => {
+  try {
+    if (typeof UIManager?.hasViewManagerConfig === 'function') {
+      return UIManager.hasViewManagerConfig('RNSTabsHost');
+    }
+    return Boolean(UIManager?.getViewManagerConfig?.('RNSTabsHost'));
+  } catch {
+    return false;
+  }
+};
+
 const createTabs = () => {
-  if (isNativeTabsEnabled()) {
+  const nativeTabsRequested = shouldUseNativeTabs();
+  const nativeTabsHostAvailable = nativeTabsRequested && hasNativeTabsHost();
+
+  if (nativeTabsRequested && !nativeTabsHostAvailable) {
+    if (__DEV__) {
+      console.warn('Native iOS tabs requested, but RNSTabsHost is unavailable; using JS tabs.');
+    }
+  }
+
+  if (nativeTabsHostAvailable) {
     try {
       const { createNativeBottomTabNavigator } = require('@react-navigation/bottom-tabs/unstable');
-      return createNativeBottomTabNavigator();
+      const navigator = createNativeBottomTabNavigator();
+      return { Navigator: navigator, nativeTabsEnabled: true };
     } catch (error) {
       if (__DEV__) {
         console.warn('Native iOS tabs unavailable; using JS tabs.', error);
       }
     }
   }
-  return createBottomTabNavigator();
+  return { Navigator: createBottomTabNavigator(), nativeTabsEnabled: false };
 };
-const Tab = createTabs();
 
 const makeRoute = (params = {}) => ({ params });
 
@@ -80,51 +99,11 @@ function RecordStackNavigator() {
 function MainTabs() {
   const { t } = useI18n();
   const { colors, isDark } = useTheme();
-  const nativeTabsEnabled = isNativeTabsEnabled();
-  const [activeTab, setActiveTab] = React.useState('Home');
-
-  if (__DEV__) {
-    const tabs = [
-      { name: 'Home', title: t('tabs.home'), component: <HomeScreen /> },
-      { name: 'Record', title: t('tabs.record'), component: <RecordStackNavigator /> },
-      { name: 'Store', title: t('tabs.store'), component: <StoreScreen /> },
-      { name: 'Profile', title: t('tabs.profile'), component: <ProfileScreen /> },
-    ];
-    const active = tabs.find((tab) => tab.name === activeTab) || tabs[0];
-
-    return (
-      <View style={[styles.tabShell, { backgroundColor: colors.background }]}>
-        <View style={styles.tabContent}>{active.component}</View>
-        <View style={[styles.manualTabBar, { backgroundColor: colors.tab, borderTopColor: colors.borderStrong }]}>
-          {tabs.map((tab) => {
-            const selected = tab.name === active.name;
-            const [activeIcon, inactiveIcon] = tabIcons[tab.name].fallback;
-            return (
-              <Pressable
-                key={tab.name}
-                onPress={() => setActiveTab(tab.name)}
-                style={styles.manualTabButton}
-              >
-                <Ionicons
-                  color={selected ? colors.primary : colors.textMuted}
-                  name={selected ? activeIcon : inactiveIcon}
-                  size={22}
-                />
-                <Text style={[styles.manualTabLabel, { color: selected ? colors.primary : colors.textMuted }]}>
-                  {tab.title}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
-    );
-  }
+  const { Navigator: Tab, nativeTabsEnabled } = React.useMemo(createTabs, []);
 
   const sharedTabOptions = {
     tabBarActiveTintColor: colors.primary,
     tabBarInactiveTintColor: colors.textMuted,
-    tabBarStyle: { backgroundColor: colors.tab },
     tabBarLabelStyle: {
       fontSize: 12,
       fontWeight: '800',
@@ -149,7 +128,7 @@ function MainTabs() {
     headerShown: false,
     tabBarHideOnKeyboard: true,
     tabBarStyle: [
-      sharedTabOptions.tabBarStyle,
+      { backgroundColor: colors.tab },
       { borderTopColor: colors.borderStrong, elevation: 0, height: 64, paddingBottom: 8, paddingTop: 8 },
     ],
   };
@@ -223,9 +202,7 @@ export default function AppNavigator() {
   return (
     <>
       <StatusBar style={isDark ? 'light' : 'dark'} />
-      {isAuthenticated && !requiresEmailVerification && __DEV__ ? (
-        <MainTabs />
-      ) : isAuthenticated && !requiresEmailVerification ? (
+      {isAuthenticated && !requiresEmailVerification ? (
         <NavigationContainer
           theme={{
             ...navigationTheme,
@@ -256,28 +233,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     justifyContent: 'center',
-  },
-  manualTabBar: {
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    minHeight: 72,
-    paddingBottom: 10,
-    paddingTop: 8,
-  },
-  manualTabButton: {
-    alignItems: 'center',
-    flex: 1,
-    gap: 3,
-    justifyContent: 'center',
-  },
-  manualTabLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  tabContent: {
-    flex: 1,
-  },
-  tabShell: {
-    flex: 1,
   },
 });
